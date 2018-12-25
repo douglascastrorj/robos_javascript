@@ -1,0 +1,241 @@
+<html>
+
+<head>
+	<meta charset="UTF-8">
+	<script language="javascript" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/0.6.1/p5.js"></script>
+	<script language="javascript" src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/0.6.1/addons/p5.dom.js"></script>
+	<script language="javascript" src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/0.6.1/addons/p5.sound.js"></script>
+	<script language="javascript" type="text/javascript" src="agent.js"></script>
+	<script language="javascript" type="text/javascript">
+
+		var NUM_VEHICLES = 1;
+		var NUM_OBSTACLES = 100;
+		// LINE/RECTANGLE
+		//retorna o ponto de intersecao que pode ser util para medir distancia para o obstaculo
+		function lineRect(x1, y1, x2, y2, rx, ry, rw, rh) {
+
+			// console.log(x1, y1, x2, y2, rx, ry, rw, rh)
+
+			// check if the line has hit any of the rectangle's sides
+			// uses the Line/Line function below
+			left_side = lineLine(x1, y1, x2, y2, rx, ry, rx, ry + rh);
+			right_side = lineLine(x1, y1, x2, y2, rx + rw, ry, rx + rw, ry + rh);
+			top_side = lineLine(x1, y1, x2, y2, rx, ry, rx + rw, ry);
+			bottom_side = lineLine(x1, y1, x2, y2, rx, ry + rh, rx + rw, ry + rh);
+
+			intersectionPoint = null;
+			if (left_side.intersectionPoint) {
+				intersectionPoint = left_side.intersectionPoint
+			}
+			else if (right_side.intersectionPoint) {
+				intersectionPoint = right_side.intersectionPoint
+			}
+			else if (top_side.intersectionPoint) {
+				intersectionPoint = top_side.intersectionPoint
+			}
+			else if (bottom_side.intersectionPoint) {
+				intersectionPoint = bottom_side.intersectionPoint
+			}
+
+			// if ANY of the above are true, the line
+			// has hit the rectangle
+			if (left_side.colide || right_side.colide || top_side.colide || bottom_side.colide) {
+				// console.log(left_side, right_side, top_side, bottom_side)
+				return { colide: true, intersectionPoint: intersectionPoint };
+			}
+			return { colide: false, intersectionPoint: intersectionPoint };
+		}
+
+
+		// LINE/LINE
+		function lineLine(x1, y1, x2, y2, x3, y3, x4, y4) {
+
+			// calculate the direction of the lines
+			uA = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / ((y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1));
+			uB = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / ((y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1));
+
+			// if uA and uB are between 0-1, lines are colliding
+			if (uA >= 0 && uA <= 1 && uB >= 0 && uB <= 1) {
+
+				// optionally, draw a circle where the lines meet
+				intersectionX = x1 + (uA * (x2 - x1));
+				intersectionY = y1 + (uA * (y2 - y1));
+
+				var intersectionPoint = { x: intersectionX, y: intersectionY }
+
+
+				return { colide: true, intersectionPoint: intersectionPoint };
+			}
+			return { colide: false };
+		}
+
+		var vehicles = [];
+		var obstacles = [];
+
+		function setup() {
+			createCanvas(800, 600);
+
+			for (var i = 0; i < NUM_VEHICLES; i++) {
+				var x = random(width);
+				var y = random(height);
+				let dna = [random(2) - 1, random(2) - 1, random(2) - 1]
+				vehicles[i] = new Vehicle(x, y, dna);
+			}
+
+			//criar obstaculos nas bordas
+			obstacles.push({
+				width: width,
+				height: 500,
+				position: createVector(0, -490)
+			})
+
+			obstacles.push({
+				width: width,
+				height: 500,
+				position: createVector(0, height - 10 )
+			})
+
+			obstacles.push({
+				width: 500,
+				height: height,
+				position: createVector(-490, 0)
+			})
+
+			obstacles.push({
+				width: 500,
+				height: height,
+				position: createVector(width - 10, 0)
+			})
+
+
+			//preencher obstaculos
+			for (var i = 0; i < NUM_OBSTACLES; i++) {
+				let x = random(width);
+				let y = random(height);
+
+				let size = random(50);
+
+				let h = random(50) + 10;
+				let w = 10;
+				if (random(2) > 1) {
+					let swipe = h;
+					h = w;
+					w = swipe;
+				}
+
+				obstacles.push({
+					width: w,
+					height: h,
+					position: createVector(x, y)
+				})
+
+			}
+
+		}
+
+		function mouseClicked() {
+			// let dna = [random(2) - 1, random(2) - 1, random(2) - 1]
+			//vehicles.push(new Vehicle(mouseX, mouseY, dna));
+			vehicles[0].position = createVector(mouseX, mouseY)
+		}
+
+		function scanearTerreno(vehicle) {
+			leitura = [];
+
+			for (var k = 0; k < vehicle.sensores.length; k++) {
+				let minValue = null;
+				for (var j = 0; j < obstacles.length; j++) {
+
+
+					let teste_colisao = lineRect(vehicle.position.x, vehicle.position.y, vehicle.position.x + vehicle.sensores[k].x, vehicle.position.y + vehicle.sensores[k].y,
+						obstacles[j].position.x, obstacles[j].position.y, obstacles[j].width, obstacles[j].height
+					)
+
+					if (teste_colisao.colide) {
+						let d = dist(teste_colisao.intersectionPoint.x, teste_colisao.intersectionPoint.y, vehicle.position.x, vehicle.position.y)
+						if (minValue == null || d < minValue) {
+							minValue = d;
+						}
+					}
+				}
+
+				leitura.push(minValue);
+			}
+
+			leitura = leitura.map(value => {
+				if (value != null)
+					return value / vehicle.sensores[0].mag();
+				else
+					return 1;
+			})
+			// var print = false;
+			// for (var i = 0; i < leitura.length; i++) {
+			// 	if (leitura[i] != null) {
+			// 		print = true;
+			// 	}
+			// }
+			// if (print) {
+			// 	console.clear();
+			// 	console.log('leitura dos sensores ', leitura)
+			// }
+
+			return leitura;
+
+		}
+
+		function veiculoBateu(leitura) {
+			return leitura.filter(valor => {
+				return valor <= 0.1;
+			}).length > 0;
+		}
+
+		function escolherAcaoHeuristica(vehicle, leitura) {
+
+			if (leitura[0] + leitura[1] + leitura[2] != 3) {
+				// se nao esta muito perto e sensor da esquerda esta mais longe vai para esquerda
+				if (leitura[1] < 0.2) {
+					if (leitura[0] < leitura[2]) {
+						vehicle.rotate(-0.2);
+					} else {
+						vehicle.rotate(0.2);
+					}
+				}
+				if (leitura[0] <= 0.5) {
+					vehicle.rotate(-0.2);
+				} else if (leitura[2] <= 0.5) {
+					vehicle.rotate(0.2);
+				}
+			}
+		}
+
+
+		function draw() {
+			background(51);
+
+			for (var i = 0; i < obstacles.length; i++) {
+				rect(obstacles[i].position.x, obstacles[i].position.y, obstacles[i].width, obstacles[i].height);
+			}
+
+			for (var i = vehicles.length - 1; i >= 0; i--) {
+
+				vehicles[i].update();
+				vehicles[i].display();
+
+				let leitura = scanearTerreno(vehicles[i]);
+				if (veiculoBateu(leitura)) {
+					console.log('Bateu', leitura)
+				} else {
+					escolherAcaoHeuristica(vehicles[i], leitura)
+				}
+
+			}
+		}
+
+
+	</script>
+</head>
+
+<body>
+</body>
+
+</html>
