@@ -8,6 +8,13 @@
 	<script language="javascript" type="text/javascript" src="agent.js"></script>
 	<script language="javascript" type="text/javascript">
 
+		// [[0.7400648565835265,0.556705352010765,0.6705565444179431],[1.3665001566563921,1.4069183022233624,1.5959239841293986],[1.4715261163503304,0.9477063580622351,1.1951432872717427],[2.5273041765234145,2.092090028846348,1.8890090972343163],[1.458888735235165,1.408344925051712,1.5095409536400992],[2.160052217988862,1.4878255876532083,1.889062338849814],[1.8181558285668902,1.760795601253852,1.8080661019844326],[2.225562521994116,2.3283693759130926,2.187167361689331]]
+		var Q = []
+
+		var num_states = 8; // perto / longe para cada um dos 3 sensores
+		var num_actions = 3;
+
+
 		var NUM_VEHICLES = 1;
 		var NUM_OBSTACLES = 100;
 		// LINE/RECTANGLE
@@ -75,6 +82,17 @@
 		function setup() {
 			createCanvas(800, 600);
 
+
+			for (var i = 0; i < num_states; i++) {
+				Q.push([])
+				for (var j = 0; j < num_actions; j++) {
+					// Q[i].push(random(1));
+					Q[i].push(0);
+				}
+			}
+
+			console.log(Q)
+
 			for (var i = 0; i < NUM_VEHICLES; i++) {
 				var x = random(width);
 				var y = random(height);
@@ -92,7 +110,7 @@
 			obstacles.push({
 				width: width,
 				height: 500,
-				position: createVector(0, height - 10 )
+				position: createVector(0, height - 10)
 			})
 
 			obstacles.push({
@@ -116,7 +134,7 @@
 				let size = random(50);
 
 				let h = random(50) + 10;
-				let w = 10;
+				let w = 3;
 				if (random(2) > 1) {
 					let swipe = h;
 					h = w;
@@ -133,7 +151,7 @@
 
 		}
 
-		function mouseClicked() {
+		function mouseDragged() {
 			// let dna = [random(2) - 1, random(2) - 1, random(2) - 1]
 			//vehicles.push(new Vehicle(mouseX, mouseY, dna));
 			vehicles[0].position = createVector(mouseX, mouseY)
@@ -183,7 +201,22 @@
 
 		}
 
-		function veiculoBateu(leitura) {
+		function getAgentState(leitura) {
+			let state = leitura.map(valor => {
+				//discretizar em perto 0 ou longe 1
+				if (valor > 0.5) return 1;
+				else return 0;
+			})
+
+			state = state[0] * Math.pow(2, 0) + state[1] * Math.pow(2, 1) + state[2] * Math.pow(2, 2);
+
+			return state;
+		}
+
+		function veiculoBateu(vehicle, leitura) {
+			if (vehicle.position.x < 0 || vehicle.position.x > width || vehicle.position.y < 0 || vehicle.position.y > height)
+				return true;
+
 			return leitura.filter(valor => {
 				return valor <= 0.1;
 			}).length > 0;
@@ -208,6 +241,84 @@
 			}
 		}
 
+		//probabilidade maior nas primeiras iteracoes e depois vai decaindo
+		var prob_acao_aleatoria = 1;
+		function escolherAcaoQ(vehicle, leitura) {
+
+
+			console.log(prob_acao_aleatoria)
+			prob_acao_aleatoria -= prob_acao_aleatoria / 2000;
+
+			let state = getAgentState(leitura);
+
+			let acoesPossiveis = Q[state];
+
+			if (random(1) < prob_acao_aleatoria) {
+				return Math.floor(random(Q[state].length));
+			} else {
+
+				let maiorIndex = 0;
+
+				for (var i = 0; i < Q[state].length; i++) {
+					if (Q[state][i] > Q[state][maiorIndex]) {
+						maior = Q[state][i];
+						maiorIndex = i;
+					}
+				}
+
+				return maiorIndex
+			}
+
+		}
+		//leitura dos sensores é o estado
+		function reward(leitura, acao) {
+
+
+			// quanto mais distante dos obstaculos maior a recompensa
+			let proximity_reward = 0.0;
+			for (value of leitura) {
+				proximity_reward += value / leitura.length;
+			}
+
+			let state = getAgentState(leitura);
+			//recompensa por andar para frente
+			let forward_reward = 0.0;
+			if (acao == 0 && proximity_reward > 0.4) {
+				forward_reward = 0.1 * proximity_reward;
+			} else if (state == 7 && acao != 0) {
+				forward_reward = proximity_reward * -1.1;
+			}
+
+			//se bater dar penalidade
+			let collision_reward = 0.0;
+			if (proximity_reward < 0.6 && acao == 0) collision_reward = -3;
+
+
+			let reward = proximity_reward + forward_reward + collision_reward;
+
+			console.log('avoid negativo', reward)
+			console.table(Q)
+
+			return reward;
+
+		}
+
+		function updateQ(leitura, action) {
+			const learning_rate = 0.01;
+			// for (var i = 0; i < Q.length; i++) {
+			// 	for (var j = 0; j < Q[i].length; j++) {
+			// 		Q[i][j] = (1 - learning_rate) * Q[i][j] + learning_rate * reward(leitura, j);
+			// 		// let state = getAgentState(leitura);		
+			// 		// Q[state][action] = Math.max(0 , (1 - learning_rate) * Q[state][action] + learning_rate * reward(leitura, action) );
+
+			// 	}
+			// }
+
+			let state = getAgentState(leitura);		
+			Q[state][action] = Math.max(0 , (1 - learning_rate) * Q[state][action] + learning_rate * reward(leitura, action) );
+
+		}
+
 
 		function draw() {
 			background(51);
@@ -222,13 +333,30 @@
 				vehicles[i].display();
 
 				let leitura = scanearTerreno(vehicles[i]);
-				if (veiculoBateu(leitura)) {
+
+				if (veiculoBateu(vehicles[i], leitura)) {
 					console.log('Bateu', leitura)
+					vehicles[i].position.x = width / 2;
+					vehicles[i].position.y = height / 2;
 				} else {
-					escolherAcaoHeuristica(vehicles[i], leitura)
+					// escolherAcaoHeuristica(vehicles[i], leitura)
+					let acao = escolherAcaoQ(vehicles[i], leitura)
+					if (acao == 0) {
+
+					} else if (acao == 1) {
+						vehicles[i].rotate(-0.2)
+					} else {
+						vehicles[i].rotate(0.2)
+					}
+
+					updateQ(leitura, acao);
+
+					// console.log(getAgentState(leitura))
 				}
 
 			}
+
+
 		}
 
 

@@ -14,7 +14,7 @@ function Vehicle(x, y, dna) {
     var sensor1 = this.velocity.copy();
     sensor1.normalize();
     sensor1.mult(60)
-    this.sensores = [ sensor1.copy().rotate(-6),  sensor1, sensor1.copy().rotate(6) ]
+    this.sensores = [ sensor1.copy().rotate(-0.15),  sensor1, sensor1.copy().rotate(0.15) ]
 
     //pesos para calcular funcao de decidir acao
     this.dna = dna;
